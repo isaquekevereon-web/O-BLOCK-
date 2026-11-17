@@ -1,14 +1,18 @@
 
--- O-BLOCK 👺 | UNIVERSAL PVP V3
+-- O-BLOCK 👺 | UNIVERSAL PVP V4
 -- Roblox Luau | Delta Executor
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
+local StarterGui = game:GetService("StarterGui")
 
 local LP = Players.LocalPlayer
 
+if _G.OBLOCK_V4_STOP then
+    pcall(_G.OBLOCK_V4_STOP)
+end
 if _G.OBLOCK_V3_STOP then
     pcall(_G.OBLOCK_V3_STOP)
 end
@@ -16,11 +20,13 @@ end
 local parent = CoreGui
 if gethui then
     local ok, result = pcall(gethui)
-    if ok and result then parent = result end
+    if ok and result then
+        parent = result
+    end
 end
 
 local gui = Instance.new("ScreenGui")
-gui.Name = "OBLOCK_UNIVERSAL_V3"
+gui.Name = "OBLOCK_UNIVERSAL_V4"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.Parent = parent
@@ -31,6 +37,7 @@ local cfg = {
     FOV = true,
     IgnoreDead = true,
     TeamCheck = false,
+    WallCheck = true,
     Radius = 150,
     Smooth = 0.25
 }
@@ -59,8 +66,8 @@ end
 
 local panel = newFrame(
     gui,
-    UDim2.fromOffset(310, 440),
-    UDim2.new(0.5, -155, 0.5, -220),
+    UDim2.fromOffset(310, 495),
+    UDim2.new(0.5, -155, 0.5, -247),
     dark
 )
 panel.Active = true
@@ -75,7 +82,7 @@ local header = Instance.new("TextLabel")
 header.Size = UDim2.new(1, -55, 0, 48)
 header.Position = UDim2.fromOffset(14, 0)
 header.BackgroundTransparency = 1
-header.Text = "O-BLOCK 👺 | PVP V3"
+header.Text = "O-BLOCK 👺 | PVP V4"
 header.TextColor3 = purple
 header.TextSize = 19
 header.Font = Enum.Font.GothamBold
@@ -114,17 +121,23 @@ local function button(text, callback)
     b.Text = text
     b.Parent = content
     corner(b, 8)
+
     b.MouseButton1Click:Connect(function()
         callback(b)
     end)
+
     return b
 end
 
 local function toggle(label, key)
-    return button(label .. ": " .. (cfg[key] and "ON" or "OFF"), function(b)
-        cfg[key] = not cfg[key]
-        b.Text = label .. ": " .. (cfg[key] and "ON" or "OFF")
-    end)
+    return button(
+        label .. ": " .. (cfg[key] and "ON" or "OFF"),
+        function(b)
+            cfg[key] = not cfg[key]
+            b.Text = label .. ": " ..
+                (cfg[key] and "ON" or "OFF")
+        end
+    )
 end
 
 toggle("🎯 AIMBOT HEAD", "Aim")
@@ -132,23 +145,31 @@ toggle("📦 ESP BOX + HEALTH", "ESP")
 toggle("⭕ SHOW FOV", "FOV")
 toggle("💀 IGNORE DEAD", "IgnoreDead")
 toggle("🛡️ TEAM CHECK", "TeamCheck")
+toggle("🧱 WALL CHECK", "WallCheck")
 
 button("⭕ FOV RADIUS: 150", function(b)
     cfg.Radius = cfg.Radius + 25
-    if cfg.Radius > 350 then cfg.Radius = 50 end
+    if cfg.Radius > 350 then
+        cfg.Radius = 50
+    end
     b.Text = "⭕ FOV RADIUS: " .. cfg.Radius
 end)
 
 button("🎚️ AIM SMOOTH: 0.25", function(b)
     cfg.Smooth = cfg.Smooth + 0.1
-    if cfg.Smooth > 0.85 then cfg.Smooth = 0.05 end
-    b.Text = string.format("🎚️ AIM SMOOTH: %.2f", cfg.Smooth)
+    if cfg.Smooth > 0.85 then
+        cfg.Smooth = 0.05
+    end
+    b.Text = string.format(
+        "🎚️ AIM SMOOTH: %.2f",
+        cfg.Smooth
+    )
 end)
 
 local status = Instance.new("TextLabel")
 status.Size = UDim2.new(1, 0, 0, 28)
 status.BackgroundTransparency = 1
-status.Text = "O-BLOCK UNIVERSAL | READY"
+status.Text = "O-BLOCK V4 | WALL CHECK READY"
 status.TextColor3 = Color3.fromRGB(185, 185, 195)
 status.TextSize = 12
 status.Font = Enum.Font.Gotham
@@ -211,27 +232,78 @@ fovStroke.Thickness = 2
 fovStroke.Parent = fov
 
 local function validPlayer(p)
-    if p == LP then return false end
+    if p == LP then
+        return false
+    end
 
-    if cfg.TeamCheck and LP.Team ~= nil and p.Team == LP.Team then
+    if cfg.TeamCheck and LP.Team ~= nil
+    and p.Team == LP.Team then
         return false
     end
 
     local char = p.Character
-    if not char then return false end
+    if not char then
+        return false
+    end
 
     local hum = char:FindFirstChildOfClass("Humanoid")
     local head = char:FindFirstChild("Head")
 
-    if not hum or not head then return false end
-    if cfg.IgnoreDead and hum.Health <= 0 then return false end
+    if not hum or not head then
+        return false
+    end
+
+    if cfg.IgnoreDead and hum.Health <= 0 then
+        return false
+    end
 
     return true, head, hum
 end
 
+-- WALL CHECK / VISIBILITY CHECK
+
+local function isVisible(camera, head, character)
+    if not cfg.WallCheck then
+        return true
+    end
+
+    local origin = camera.CFrame.Position
+    local direction = head.Position - origin
+
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.IgnoreWater = true
+
+    local filter = {camera}
+
+    if LP.Character then
+        table.insert(filter, LP.Character)
+    end
+
+    params.FilterDescendantsInstances = filter
+
+    local hit = workspace:Raycast(
+        origin,
+        direction,
+        params
+    )
+
+    if not hit then
+        return true
+    end
+
+    return hit.Instance:IsDescendantOf(character)
+end
+
+-- TARGET SELECTION
+
 local function getTarget(camera)
     local size = camera.ViewportSize
-    local center = Vector2.new(size.X / 2, size.Y / 2)
+    local center = Vector2.new(
+        size.X / 2,
+        size.Y / 2
+    )
+
     local nearest = nil
     local nearestDist = cfg.Radius
 
@@ -239,16 +311,19 @@ local function getTarget(camera)
         local ok, head = validPlayer(p)
 
         if ok then
-            local pos, visible = camera:WorldToViewportPoint(head.Position)
+            local pos, onScreen =
+                camera:WorldToViewportPoint(head.Position)
 
-            if visible and pos.Z > 0 then
+            if onScreen and pos.Z > 0 then
                 local distance = (
                     Vector2.new(pos.X, pos.Y) - center
                 ).Magnitude
 
                 if distance < nearestDist then
-                    nearestDist = distance
-                    nearest = head
+                    if isVisible(camera, head, p.Character) then
+                        nearest = head
+                        nearestDist = distance
+                    end
                 end
             end
         end
@@ -257,7 +332,7 @@ local function getTarget(camera)
     return nearest
 end
 
--- ESP rectangular box and health bar
+-- ESP BOX + HEALTH BAR
 
 local function clearVisual(p)
     local v = visuals[p]
@@ -286,7 +361,8 @@ local function createVisual(p)
     local healthBack = Instance.new("Frame")
     healthBack.Size = UDim2.new(0, 5, 1, 0)
     healthBack.Position = UDim2.fromOffset(-10, 0)
-    healthBack.BackgroundColor3 = Color3.fromRGB(90, 20, 20)
+    healthBack.BackgroundColor3 =
+        Color3.fromRGB(90, 20, 20)
     healthBack.BorderSizePixel = 0
     healthBack.Parent = container
 
@@ -294,7 +370,8 @@ local function createVisual(p)
     health.AnchorPoint = Vector2.new(0, 1)
     health.Position = UDim2.fromScale(0, 1)
     health.Size = UDim2.fromScale(1, 1)
-    health.BackgroundColor3 = Color3.fromRGB(40, 255, 80)
+    health.BackgroundColor3 =
+        Color3.fromRGB(40, 255, 80)
     health.BorderSizePixel = 0
     health.Parent = healthBack
 
@@ -318,6 +395,7 @@ local function updateESP(p, camera)
 
     local char = p.Character
     local root = char:FindFirstChild("HumanoidRootPart")
+
     if not root then
         clearVisual(p)
         return
@@ -326,6 +404,7 @@ local function updateESP(p, camera)
     local top = camera:WorldToViewportPoint(
         head.Position + Vector3.new(0, 0.7, 0)
     )
+
     local bottom = camera:WorldToViewportPoint(
         root.Position - Vector3.new(0, 3, 0)
     )
@@ -348,6 +427,7 @@ local function updateESP(p, camera)
     end
 
     local v = visuals[p]
+
     v.Gui.Size = UDim2.fromOffset(width, height)
     v.Gui.Position = UDim2.fromOffset(
         top.X - width / 2,
@@ -361,6 +441,7 @@ local function updateESP(p, camera)
     )
 
     v.Health.Size = UDim2.fromScale(1, ratio)
+
     v.Health.BackgroundColor3 = Color3.fromRGB(
         math.floor(255 * (1 - ratio)),
         math.floor(255 * ratio),
@@ -368,58 +449,70 @@ local function updateESP(p, camera)
     )
 end
 
+-- MAIN LOOP
+
 local espTimer = 0
 
-table.insert(connections, RunService.RenderStepped:Connect(function(dt)
-    if not running then return end
-
-    local camera = workspace.CurrentCamera
-    if not camera then return end
-
-    local size = camera.ViewportSize
-
-    fov.Visible = cfg.FOV
-    fov.Size = UDim2.fromOffset(
-        cfg.Radius * 2,
-        cfg.Radius * 2
-    )
-    fov.Position = UDim2.fromOffset(
-        size.X / 2,
-        size.Y / 2
-    )
-
-    if cfg.Aim then
-        local target = getTarget(camera)
-
-        if target then
-            local desired = CFrame.lookAt(
-                camera.CFrame.Position,
-                target.Position
-            )
-
-            camera.CFrame = camera.CFrame:Lerp(
-                desired,
-                math.clamp(cfg.Smooth, 0.01, 1)
-            )
+table.insert(connections,
+    RunService.RenderStepped:Connect(function(dt)
+        if not running then
+            return
         end
-    end
 
-    espTimer = espTimer + dt
+        local camera = workspace.CurrentCamera
+        if not camera then
+            return
+        end
 
-    if espTimer >= 0.08 then
-        espTimer = 0
+        local size = camera.ViewportSize
 
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= LP then
-                updateESP(p, camera)
+        fov.Visible = cfg.FOV
+        fov.Size = UDim2.fromOffset(
+            cfg.Radius * 2,
+            cfg.Radius * 2
+        )
+        fov.Position = UDim2.fromOffset(
+            size.X / 2,
+            size.Y / 2
+        )
+
+        if cfg.Aim then
+            local target = getTarget(camera)
+
+            if target then
+                local desired = CFrame.lookAt(
+                    camera.CFrame.Position,
+                    target.Position
+                )
+
+                camera.CFrame = camera.CFrame:Lerp(
+                    desired,
+                    math.clamp(cfg.Smooth, 0.01, 1)
+                )
             end
         end
-    end
-end))
 
-table.insert(connections, Players.PlayerRemoving:Connect(function(p)
-    clearVisual(p)
-end))
+        espTimer = espTimer + dt
+
+        if espTimer >= 0.08 then
+            espTimer = 0
+
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LP then
+                    updateESP(p, camera)
+                end
+            end
+        end
+    end)
+)
+
+table.insert(connections,
+    Players.PlayerRemoving:Connect(function(p)
+        clearVisual(p)
+    end)
+)
+
+-- CLEANUP
 
 local function cleanup()
     running = false
@@ -435,14 +528,14 @@ local function cleanup()
     gui:Destroy()
 end
 
-_G.OBLOCK_V3_STOP = cleanup
+_G.OBLOCK_V4_STOP = cleanup
 
 close.MouseButton1Click:Connect(cleanup)
 
 pcall(function()
-    game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = "O-BLOCK 👺 V3",
-        Text = "Universal PvP panel loaded!",
+    StarterGui:SetCore("SendNotification", {
+        Title = "O-BLOCK 👺 V4",
+        Text = "Wall Check enabled!",
         Duration = 5
     })
 end)
