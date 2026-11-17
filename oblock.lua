@@ -1,6 +1,6 @@
 
 -- O-BLOCK 👺 | V1
--- Painel de teleportes e seleção de ovos
+-- Egg selection and teleport panel
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
@@ -21,6 +21,7 @@ frame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
 frame.Active = true
 frame.Draggable = true
 frame.Parent = gui
+
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
 
 local stroke = Instance.new("UIStroke", frame)
@@ -43,7 +44,9 @@ close.Text = "X"
 close.TextColor3 = Color3.new(1, 1, 1)
 close.BackgroundColor3 = Color3.fromRGB(150, 35, 55)
 close.Parent = frame
+
 Instance.new("UICorner", close)
+
 close.MouseButton1Click:Connect(function()
     gui:Destroy()
 end)
@@ -52,7 +55,7 @@ local status = Instance.new("TextLabel")
 status.Size = UDim2.new(1, -20, 0, 38)
 status.Position = UDim2.fromOffset(10, 300)
 status.BackgroundTransparency = 1
-status.Text = "Pronto para selecionar um ovo"
+status.Text = "Ready to select an egg"
 status.TextColor3 = Color3.fromRGB(220, 220, 220)
 status.TextScaled = true
 status.TextWrapped = true
@@ -68,15 +71,16 @@ local function button(txt, y)
     b.TextSize = 15
     b.Text = txt
     b.Parent = frame
+
     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
     return b
 end
 
-local selectBtn = button("🥚 ESCOLHER OVO", 55)
-local tpBtn = button("⚡ TELEPORTAR AO OVO", 107)
-local baseBtn = button("🏠 SALVAR BASE", 159)
-local returnBtn = button("🔥 VOLTAR À BASE", 211)
-local quickBtn = button("👺 TP RÁPIDO + VOLTAR", 263)
+local selectBtn = button("🥚 SELECT EGG", 55)
+local tpBtn = button("⚡ TELEPORT TO EGG", 107)
+local baseBtn = button("🏠 SAVE BASE", 159)
+local returnBtn = button("🔥 RETURN TO BASE", 211)
+local quickBtn = button("👺 QUICK TP + RETURN", 263)
 
 local eggs = {}
 local index = 0
@@ -90,8 +94,14 @@ local function root()
 end
 
 local function getPart(obj)
-    if not obj or not obj.Parent then return nil end
-    if obj:IsA("BasePart") then return obj end
+    if not obj or not obj.Parent then
+        return nil
+    end
+
+    if obj:IsA("BasePart") then
+        return obj
+    end
+
     if obj:IsA("Model") then
         return obj.PrimaryPart
             or obj:FindFirstChildWhichIsA("BasePart", true)
@@ -100,9 +110,11 @@ end
 
 local function scan()
     eggs = {}
+
     for _, obj in ipairs(workspace:GetDescendants()) do
         if (obj:IsA("Model") or obj:IsA("BasePart"))
             and string.find(string.lower(obj.Name), "egg", 1, true) then
+
             if getPart(obj) then
                 table.insert(eggs, obj)
             end
@@ -112,73 +124,80 @@ end
 
 local function teleport(cf)
     local r = root()
+
     if not r then
-        status.Text = "Personagem não encontrado"
+        status.Text = "Character not found"
         return false
     end
+
     r.CFrame = cf
     return true
 end
 
 selectBtn.MouseButton1Click:Connect(function()
     scan()
+
     if #eggs == 0 then
-        status.Text = "Nenhum objeto Egg encontrado"
+        status.Text = "No Egg objects found"
         return
     end
 
     index = index % #eggs + 1
     selected = eggs[index]
-    status.Text = "Selecionado: " .. selected.Name
+    status.Text = "Selected: " .. selected.Name
 end)
 
 tpBtn.MouseButton1Click:Connect(function()
     local part = getPart(selected)
+
     if not part then
-        status.Text = "Selecione um ovo primeiro"
+        status.Text = "Select an egg first"
         return
     end
 
     if teleport(part.CFrame * CFrame.new(0, 4, 0)) then
-        status.Text = "TP realizado: " .. selected.Name
+        status.Text = "Teleported: " .. selected.Name
     end
 end)
 
 baseBtn.MouseButton1Click:Connect(function()
     local r = root()
+
     if r then
         base = r.CFrame
-        status.Text = "Base salva com sucesso!"
+        status.Text = "Base saved successfully!"
     end
 end)
 
 returnBtn.MouseButton1Click:Connect(function()
     if not base then
-        status.Text = "Salve sua base primeiro"
+        status.Text = "Save your base first"
         return
     end
 
     if teleport(base) then
-        status.Text = "Retornou à base!"
+        status.Text = "Returned to base!"
     end
 end)
 
 quickBtn.MouseButton1Click:Connect(function()
     if busy then return end
+
     local part = getPart(selected)
 
     if not part or not base then
-        status.Text = "Selecione o ovo e salve a base"
+        status.Text = "Select an egg and save your base"
         return
     end
 
     busy = true
+
     if teleport(part.CFrame * CFrame.new(0, 4, 0)) then
-        status.Text = "Perto do ovo; retornando..."
+        status.Text = "Near egg; returning..."
         task.wait(0.5)
         teleport(base)
-        status.Text = "Retorno concluído!"
+        status.Text = "Return completed!"
     end
+
     busy = false
 end)
-
