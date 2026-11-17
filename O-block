@@ -1,0 +1,233 @@
+
+-- O-BLOCK 👺 | PvP Edition V2
+-- Client-side aim assist and ESP overlay
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local parent = (gethui and gethui()) or game:GetService("CoreGui")
+local previous = parent:FindFirstChild("OBLOCK_PVP_GUI")
+if previous then previous:Destroy() end
+if _G.OBLOCK_PVP_CLEANUP then pcall(_G.OBLOCK_PVP_CLEANUP) end
+
+local enabledAim, enabledESP, ignoreDead, showFOV = false, false, true, true
+local fovRadius, smoothness = 140, 0.22
+local connections, highlights, bars = {}, {}, {}
+local gui = Instance.new("ScreenGui")
+gui.Name = "OBLOCK_PVP_GUI"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.Parent = parent
+
+local function style(obj, radius)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, radius or 8)
+    corner.Parent = obj
+end
+local panel = Instance.new("Frame")
+panel.Size = UDim2.fromOffset(310, 405)
+panel.Position = UDim2.new(0.5, -155, 0.5, -202)
+panel.BackgroundColor3 = Color3.fromRGB(18, 18, 27)
+panel.Active = true
+panel.Draggable = true
+panel.Parent = gui
+style(panel, 14)
+local outline = Instance.new("UIStroke")
+outline.Color = Color3.fromRGB(163, 80, 245)
+outline.Thickness = 2
+outline.Parent = panel
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -50, 0, 44)
+title.Position = UDim2.fromOffset(14, 3)
+title.BackgroundTransparency = 1
+title.Text = "O-BLOCK 👺 | PvP V2"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 20
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.TextColor3 = Color3.fromRGB(215, 170, 255)
+title.Parent = panel
+local function makeButton(label, y, callback)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, -28, 0, 39)
+    b.Position = UDim2.fromOffset(14, y)
+    b.BackgroundColor3 = Color3.fromRGB(67, 40, 105)
+    b.TextColor3 = Color3.new(1, 1, 1)
+    b.Font = Enum.Font.GothamSemibold
+    b.TextSize = 14
+    b.Text = label
+    b.Parent = panel
+    style(b, 8)
+    b.MouseButton1Click:Connect(function() callback(b) end)
+    return b
+end
+local close = Instance.new("TextButton")
+close.Size = UDim2.fromOffset(32, 30)
+close.Position = UDim2.new(1, -39, 0, 8)
+close.Text = "X"
+close.TextColor3 = Color3.new(1, 1, 1)
+close.BackgroundColor3 = Color3.fromRGB(130, 40, 65)
+close.Font = Enum.Font.GothamBold
+close.Parent = panel
+style(close, 7)
+local aimButton = makeButton("🎯 AIMBOT: OFF", 54, function(b)
+    enabledAim = not enabledAim
+    b.Text = "🎯 AIMBOT: " .. (enabledAim and "ON" or "OFF")
+end)
+makeButton("📦 ESP BOX + HEALTH: OFF", 100, function(b)
+    enabledESP = not enabledESP
+    b.Text = "📦 ESP BOX + HEALTH: " .. (enabledESP and "ON" or "OFF")
+end)
+makeButton("💀 IGNORE DEAD: ON", 146, function(b)
+    ignoreDead = not ignoreDead
+    b.Text = "💀 IGNORE DEAD: " .. (ignoreDead and "ON" or "OFF")
+end)
+makeButton("⭕ SHOW FOV: ON", 192, function(b)
+    showFOV = not showFOV
+    b.Text = "⭕ SHOW FOV: " .. (showFOV and "ON" or "OFF")
+end)
+local fovButton = makeButton("⭕ FOV RADIUS: " .. fovRadius, 238, function(b)
+    fovRadius = fovRadius + 40
+    if fovRadius > 340 then fovRadius = 60 end
+    b.Text = "⭕ FOV RADIUS: " .. fovRadius
+end)
+makeButton("🎚️ AIM SMOOTHNESS: " .. smoothness, 284, function(b)
+    smoothness = math.floor((smoothness + 0.13) * 100 + 0.5) / 100
+    if smoothness > 0.75 then smoothness = 0.09 end
+    b.Text = "🎚️ AIM SMOOTHNESS: " .. smoothness
+end)
+local info = Instance.new("TextLabel")
+info.Size = UDim2.new(1, -20, 0, 58)
+info.Position = UDim2.fromOffset(10, 331)
+info.BackgroundTransparency = 1
+info.TextColor3 = Color3.fromRGB(195, 195, 210)
+info.TextWrapped = true
+info.TextSize = 12
+info.Font = Enum.Font.Gotham
+info.Text = "Aim assist targets nearest head inside FOV. ESP shows other players. Game/server rules may override aim or movement."
+info.Parent = panel
+
+local fovCircle = Instance.new("Frame")
+fovCircle.Name = "FOVCircle"
+fovCircle.BackgroundTransparency = 1
+fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+fovCircle.Parent = gui
+style(fovCircle, 1000)
+local fovStroke = Instance.new("UIStroke")
+fovStroke.Color = Color3.fromRGB(194, 102, 255)
+fovStroke.Thickness = 2
+fovStroke.Transparency = 0.1
+fovStroke.Parent = fovCircle
+
+local function alive(character)
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    return humanoid and humanoid.Health > 0
+end
+local function headOf(p)
+    local character = p.Character
+    if not character or (ignoreDead and not alive(character)) then return nil end
+    return character:FindFirstChild("Head")
+end
+local function targetHead()
+    local viewport = Camera.ViewportSize
+    local center = Vector2.new(viewport.X / 2, viewport.Y / 2)
+    local best, distance = nil, fovRadius
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            local head = headOf(p)
+            if head then
+                local screen, visible = Camera:WorldToViewportPoint(head.Position)
+                if visible and screen.Z > 0 then
+                    local d = (Vector2.new(screen.X, screen.Y) - center).Magnitude
+                    if d < distance then
+                        best, distance = head, d
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+local function removeESP(p)
+    if highlights[p] then highlights[p]:Destroy(); highlights[p] = nil end
+    if bars[p] then bars[p]:Destroy(); bars[p] = nil end
+end
+local function updateESP(p)
+    local character = p.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if not enabledESP or not humanoid or not root or (ignoreDead and humanoid.Health <= 0) then
+        removeESP(p)
+        return
+    end
+    if not highlights[p] or highlights[p].Adornee ~= character then
+        removeESP(p)
+        local h = Instance.new("Highlight")
+        h.Name = "OBLOCK_Box"
+        h.Adornee = character
+        h.FillTransparency = 1
+        h.OutlineColor = Color3.fromRGB(190, 90, 255)
+        h.OutlineTransparency = 0
+        h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        h.Parent = gui
+        highlights[p] = h
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "OBLOCK_Health"
+        billboard.Adornee = root
+        billboard.AlwaysOnTop = true
+        billboard.Size = UDim2.fromOffset(8, 75)
+        billboard.StudsOffset = Vector3.new(2.7, 0, 0)
+        billboard.Parent = gui
+        local back = Instance.new("Frame")
+        back.Size = UDim2.fromScale(1, 1)
+        back.BackgroundColor3 = Color3.fromRGB(80, 20, 25)
+        back.Parent = billboard
+        local fill = Instance.new("Frame")
+        fill.Name = "Fill"
+        fill.AnchorPoint = Vector2.new(0, 1)
+        fill.Position = UDim2.fromScale(0, 1)
+        fill.Size = UDim2.fromScale(1, 1)
+        fill.BackgroundColor3 = Color3.fromRGB(65, 230, 110)
+        fill.BorderSizePixel = 0
+        fill.Parent = back
+        bars[p] = billboard
+    end
+    local fill = bars[p]:FindFirstChild("Fill", true)
+    if fill then
+        local ratio = math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1)
+        fill.Size = UDim2.fromScale(1, ratio)
+        fill.BackgroundColor3 = Color3.fromRGB(math.floor(255 * (1-ratio)), math.floor(230 * ratio), 60)
+    end
+end
+local elapsed = 0
+connections[#connections + 1] = RunService.RenderStepped:Connect(function(dt)
+    Camera = workspace.CurrentCamera
+    if not Camera then return end
+    local size = Camera.ViewportSize
+    fovCircle.Visible = showFOV
+    fovCircle.Size = UDim2.fromOffset(fovRadius * 2, fovRadius * 2)
+    fovCircle.Position = UDim2.fromOffset(size.X / 2, size.Y / 2)
+    if enabledAim then
+        local head = targetHead()
+        if head then
+            local origin = Camera.CFrame.Position
+            local desired = CFrame.lookAt(origin, head.Position)
+            Camera.CFrame = Camera.CFrame:Lerp(desired, math.clamp(smoothness, 0, 1))
+        end
+    end
+    elapsed = elapsed + dt
+    if elapsed > 0.12 then
+        elapsed = 0
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer then updateESP(p) end
+        end
+    end
+end)
+connections[#connections + 1] = Players.PlayerRemoving:Connect(removeESP)
+local function cleanup()
+    for _, c in ipairs(connections) do c:Disconnect() end
+    for p in pairs(highlights) do removeESP(p) end
+    gui:Destroy()
+end
+_G.OBLOCK_PVP_CLEANUP = cleanup
+close.MouseButton1Click:Connect(cleanup)
